@@ -3,13 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Capturador de Frame para Base64</title>
+    <title>Capturador de Frame para Base64 (&lt; 50KB)</title>
     <style>
         :root {
             --bg-color: #0f172a;
             --card-bg: #1e293b;
             --primary: #38bdf8;
             --primary-hover: #0ea5e9;
+            --success: #22c55e;
+            --success-hover: #16a34a;
             --text-color: #f8fafc;
             --text-muted: #94a3b8;
             --border: #334155;
@@ -98,6 +100,16 @@
             background-color: var(--primary-hover);
         }
 
+        .btn-success {
+            background-color: var(--success);
+            color: #fff;
+            margin-top: 10px;
+        }
+
+        .btn-success:hover {
+            background-color: var(--success-hover);
+        }
+
         .video-container {
             margin-top: 20px;
             text-align: center;
@@ -126,6 +138,12 @@
             margin-top: 25px;
             border-top: 1px solid var(--border);
             padding-top: 20px;
+        }
+
+        .meta-info {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 8px;
         }
 
         textarea {
@@ -164,11 +182,11 @@
 <body>
 
 <div class="container">
-    <h1>Extrator de Frame para Base64</h1>
-    <p class="subtitle">Carregue um vídeo ou cole um link direto para extrair qualquer frame em formato Base64.</p>
+    <h1>Extrator de Frame para Base64 (&lt; 50KB)</h1>
+    <p class="subtitle">Capture frames otimizados automaticamente para menos de 50KB em formato JPEG.</p>
 
     <div class="note">
-        <strong>Aviso de CORS:</strong> Para links externos, o servidor de origem precisa permitir o acesso CORS (ex: arquivos diretos `.mp4` hospedados publicamente). Caso encontre erros de bloqueio, selecione o arquivo de vídeo diretamente do seu computador.
+        <strong>Aviso de CORS:</strong> Para links externos, o servidor de origem precisa permitir o acesso CORS. Caso contrário, carregue o vídeo do seu computador.
     </div>
 
     <div class="input-group">
@@ -195,10 +213,12 @@
     </div>
 
     <div class="output-container" id="outputSection" style="display: none;">
+        <div id="sizeInfo" class="meta-info"></div>
         <label for="base64Output">Resultado em Base64</label>
         <textarea id="base64Output" readonly></textarea>
+        <button class="btn-success" id="copyBtn">Copiar Código Base64</button>
         
-        <label style="margin-top: 15px;">Pré-visualização da Imagem Gerada</label>
+        <label style="margin-top: 20px;">Pré-visualização da Imagem Gerada</label>
         <img id="previewImg" class="preview-img" alt="Preview do Frame">
     </div>
 </div>
@@ -213,9 +233,10 @@
     const captureBtn = document.getElementById('captureBtn');
     const outputSection = document.getElementById('outputSection');
     const base64Output = document.getElementById('base64Output');
+    const sizeInfo = document.getElementById('sizeInfo');
+    const copyBtn = document.getElementById('copyBtn');
     const previewImg = document.getElementById('previewImg');
 
-    // Carregar via URL
     loadUrlBtn.addEventListener('click', () => {
         const url = videoUrlInput.value.trim();
         if (url) {
@@ -224,7 +245,6 @@
         }
     });
 
-    // Carregar via arquivo local
     videoFileInput.addEventListener('change', (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -234,14 +254,12 @@
         }
     });
 
-    // Atualizar o slider quando os metadados do vídeo forem carregados
     videoPlayer.addEventListener('loadedmetadata', () => {
         timeSlider.max = videoPlayer.duration;
         timeSlider.value = 0;
         currentTimeDisplay.textContent = formatTime(0);
     });
 
-    // Sincronizar slider com o tempo do vídeo
     videoPlayer.addEventListener('timeupdate', () => {
         if (!isDragging) {
             timeSlider.value = videoPlayer.currentTime;
@@ -253,38 +271,88 @@
     timeSlider.addEventListener('input', () => {
         isDragging = true;
         videoPlayer.currentTime = timeSlider.value;
-        currentTimeDisplay.textContent = formatTime(timeSlider.value);
+        currentTimeDisplay.textContent = formatTime(videoPlayer.currentTime);
     });
 
     timeSlider.addEventListener('change', () => {
         isDragging = false;
     });
 
-    // Capturar o frame atual
     captureBtn.addEventListener('click', () => {
         if (!videoPlayer.duration) {
             alert('Por favor, carregue um vídeo primeiro.');
             return;
         }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = videoPlayer.videoWidth;
-        canvas.height = videoPlayer.videoHeight;
+        // Se o vídeo for muito grande em resolução, redimensionamos proporcionalmente
+        // para ajudar a encaixar na meta de 50KB sem perder muita nitidez.
+        let width = videoPlayer.videoWidth;
+        let height = videoPlayer.videoHeight;
+        const maxDimension = 720; // Limite máximo inicial de largura/altura
 
+        if (width > maxDimension || height > maxDimension) {
+            if (width > height) {
+                height = Math.round((height * maxDimension) / width);
+                width = maxDimension;
+            } else {
+                width = Math.round((width * maxDimension) / height);
+                height = maxDimension;
+            }
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
         const ctx = canvas.getContext('2d');
-        ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(videoPlayer, 0, 0, width, height);
 
         try {
-            // Converte o canvas para Base64 (formato PNG)
-            const base64String = canvas.toDataURL('image/png');
-            
+            // Algoritmo para ajustar a qualidade JPEG iterativamente até ficar abaixo de 50KB (51200 bytes)
+            let quality = 0.9;
+            let base64String = canvas.toDataURL('image/jpeg', quality);
+            let sizeInBytes = getBase64Size(base64String);
+
+            // Reduz qualidade gradualmente se passar de 50KB
+            while (sizeInBytes > 51200 && quality > 0.1) {
+                quality -= 0.1;
+                base64String = canvas.toDataURL('image/jpeg', quality);
+                sizeInBytes = getBase64Size(base64String);
+            }
+
+            const sizeInKb = (sizeInBytes / 1024).toFixed(2);
+
             base64Output.value = base64String;
             previewImg.src = base64String;
+            sizeInfo.textContent = `Tamanho final: ${sizeInKb} KB (Qualidade JPEG: ${Math.round(quality * 100)}%)`;
             outputSection.style.display = 'block';
         } catch (error) {
-            alert('Erro ao capturar o frame. Isso geralmente acontece devido a restrições de CORS do servidor de vídeo externo.');
+            alert('Erro ao capturar o frame. Verifique restrições de CORS.');
             console.error(error);
         }
+    });
+
+    // Função auxiliar para calcular o tamanho real em bytes da string Base64
+    function getBase64Size(base64String) {
+        const base64WithoutHeader = base64String.split(',')[1] || base64String;
+        const padding = (base64WithoutHeader.endsWith('==') ? 2 : (base64WithoutHeader.endsWith('=') ? 1 : 0));
+        return (base64WithoutHeader.length * 3) / 4 - padding;
+    }
+
+    // Botão de copiar
+    copyBtn.addEventListener('click', () => {
+        base64Output.select();
+        navigator.clipboard.writeText(base64Output.value).then(() => {
+            const originalText = copyBtn.textContent;
+            copyBtn.textContent = 'Copiado com sucesso!';
+            copyBtn.style.backgroundColor = '#0f766e';
+            setTimeout(() => {
+                copyBtn.textContent = originalText;
+                copyBtn.style.backgroundColor = '';
+            }, 2000);
+        }).catch(err => {
+            alert('Erro ao copiar texto.');
+            console.error(err);
+        });
     });
 
     function formatTime(seconds) {
