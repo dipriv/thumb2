@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Capturador de Frame para Base64</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --primary: #38bdf8;
+            --primary-hover: #0ea5e9;
+            --text-color: #f8fafc;
+            --text-muted: #94a3b8;
+            --border: #334155;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            background: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin-top: 0;
+            margin-bottom: 8px;
+            color: var(--primary);
+        }
+
+        p.subtitle {
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-top: 0;
+            margin-bottom: 24px;
+        }
+
+        .input-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .row {
+            display: flex;
+            gap: 10px;
+        }
+
+        input[type="url"], input[type="file"] {
+            flex: 1;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            color: var(--text-color);
+            font-size: 0.95rem;
+        }
+
+        input[type="url"]:focus {
+            outline: none;
+            border-color: var(--primary);
+        }
+
+        button {
+            background-color: var(--primary);
+            color: #0f172a;
+            border: none;
+            border-radius: 8px;
+            padding: 10px 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--primary-hover);
+        }
+
+        .video-container {
+            margin-top: 20px;
+            text-align: center;
+        }
+
+        video {
+            width: 100%;
+            max-height: 400px;
+            background: #000;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+        }
+
+        .controls {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .controls input[type="range"] {
+            flex: 1;
+        }
+
+        .output-container {
+            margin-top: 25px;
+            border-top: 1px solid var(--border);
+            padding-top: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            background: #0f172a;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 10px;
+            color: var(--text-color);
+            font-family: monospace;
+            font-size: 0.85rem;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+
+        .preview-img {
+            margin-top: 15px;
+            max-width: 200px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            display: block;
+        }
+
+        .note {
+            background: rgba(56, 189, 248, 0.1);
+            border-left: 4px solid var(--primary);
+            padding: 10px 14px;
+            font-size: 0.85rem;
+            border-radius: 0 8px 8px 0;
+            margin-bottom: 20px;
+            color: var(--text-muted);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Extrator de Frame para Base64</h1>
+    <p class="subtitle">Carregue um vídeo ou cole um link direto para extrair qualquer frame em formato Base64.</p>
+
+    <div class="note">
+        <strong>Aviso de CORS:</strong> Para links externos, o servidor de origem precisa permitir o acesso CORS (ex: arquivos diretos `.mp4` hospedados publicamente). Caso encontre erros de bloqueio, selecione o arquivo de vídeo diretamente do seu computador.
+    </div>
+
+    <div class="input-group">
+        <label for="videoUrl">Link Direto do Vídeo (URL)</label>
+        <div class="row">
+            <input type="url" id="videoUrl" placeholder="https://exemplo.com/video.mp4">
+            <button id="loadUrlBtn">Carregar Link</button>
+        </div>
+    </div>
+
+    <div class="input-group">
+        <label for="videoFile">Ou Enviar Vídeo do Computador</label>
+        <input type="file" id="videoFile" accept="video/*">
+    </div>
+
+    <div class="video-container">
+        <video id="videoPlayer" controls crossorigin="anonymous"></video>
+        
+        <div class="controls">
+            <span id="currentTimeDisplay" style="font-size: 0.85rem; font-family: monospace;">00:00</span>
+            <input type="range" id="timeSlider" value="0" min="0" max="100" step="0.1">
+            <button id="captureBtn">Capturar Frame</button>
+        </div>
+    </div>
+
+    <div class="output-container" id="outputSection" style="display: none;">
+        <label for="base64Output">Resultado em Base64</label>
+        <textarea id="base64Output" readonly></textarea>
+        
+        <label style="margin-top: 15px;">Pré-visualização da Imagem Gerada</label>
+        <img id="previewImg" class="preview-img" alt="Preview do Frame">
+    </div>
+</div>
+
+<script>
+    const videoUrlInput = document.getElementById('videoUrl');
+    const loadUrlBtn = document.getElementById('loadUrlBtn');
+    const videoFileInput = document.getElementById('videoFile');
+    const videoPlayer = document.getElementById('videoPlayer');
+    const timeSlider = document.getElementById('timeSlider');
+    const currentTimeDisplay = document.getElementById('currentTimeDisplay');
+    const captureBtn = document.getElementById('captureBtn');
+    const outputSection = document.getElementById('outputSection');
+    const base64Output = document.getElementById('base64Output');
+    const previewImg = document.getElementById('previewImg');
+
+    // Carregar via URL
+    loadUrlBtn.addEventListener('click', () => {
+        const url = videoUrlInput.value.trim();
+        if (url) {
+            videoPlayer.src = url;
+            videoPlayer.load();
+        }
+    });
+
+    // Carregar via arquivo local
+    videoFileInput.addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const fileURL = URL.createObjectURL(file);
+            videoPlayer.src = fileURL;
+            videoPlayer.load();
+        }
+    });
+
+    // Atualizar o slider quando os metadados do vídeo forem carregados
+    videoPlayer.addEventListener('loadedmetadata', () => {
+        timeSlider.max = videoPlayer.duration;
+        timeSlider.value = 0;
+        currentTimeDisplay.textContent = formatTime(0);
+    });
+
+    // Sincronizar slider com o tempo do vídeo
+    videoPlayer.addEventListener('timeupdate', () => {
+        if (!isDragging) {
+            timeSlider.value = videoPlayer.currentTime;
+            currentTimeDisplay.textContent = formatTime(videoPlayer.currentTime);
+        }
+    });
+
+    let isDragging = false;
+    timeSlider.addEventListener('input', () => {
+        isDragging = true;
+        videoPlayer.currentTime = timeSlider.value;
+        currentTimeDisplay.textContent = formatTime(timeSlider.value);
+    });
+
+    timeSlider.addEventListener('change', () => {
+        isDragging = false;
+    });
+
+    // Capturar o frame atual
+    captureBtn.addEventListener('click', () => {
+        if (!videoPlayer.duration) {
+            alert('Por favor, carregue um vídeo primeiro.');
+            return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = videoPlayer.videoWidth;
+        canvas.height = videoPlayer.videoHeight;
+
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoPlayer, 0, 0, canvas.width, canvas.height);
+
+        try {
+            // Converte o canvas para Base64 (formato PNG)
+            const base64String = canvas.toDataURL('image/png');
+            
+            base64Output.value = base64String;
+            previewImg.src = base64String;
+            outputSection.style.display = 'block';
+        } catch (error) {
+            alert('Erro ao capturar o frame. Isso geralmente acontece devido a restrições de CORS do servidor de vídeo externo.');
+            console.error(error);
+        }
+    });
+
+    function formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+    }
+</script>
+
+</body>
+</html>
